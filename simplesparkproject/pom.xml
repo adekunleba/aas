@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
- Copyright 2015 and onwards Sanford Ryza, Juliet Hougland, Uri Laserson, Sean Owen and Joshua Wills
+ Copyright 2015 and onwards Sanford Ryza, Uri Laserson, Sean Owen and Joshua Wills
 
  See LICENSE file for further information.
  -->
@@ -12,17 +12,13 @@
   <packaging>jar</packaging>
   <name>Simple Spark Project</name>
 
-  <prerequisites>
-    <maven>3.2.5</maven>
-  </prerequisites>
-
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     <java.version>1.8</java.version>
-    <scala.minor.version>2.11</scala.minor.version>
+    <scala.minor.version>2.12</scala.minor.version>
     <scala.complete.version>${scala.minor.version}.8</scala.complete.version>
-    <spark.version>2.0.0</spark.version>
+    <spark.version>2.4.0</spark.version>
   </properties>
 
   <build>
@@ -30,7 +26,7 @@
       <plugin>
         <groupId>net.alchim31.maven</groupId>
         <artifactId>scala-maven-plugin</artifactId>
-        <version>3.2.2</version>
+        <version>3.4.4</version>
         <configuration>
           <scalaVersion>${scala.complete.version}</scalaVersion>
           <scalaCompatVersion>${scala.minor.version}</scalaCompatVersion>
@@ -54,7 +50,7 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-assembly-plugin</artifactId>
-        <version>2.6</version>
+        <version>3.1.0</version>
         <configuration>
           <descriptorRefs>
             <descriptorRef>jar-with-dependencies</descriptorRef>
@@ -106,6 +102,12 @@
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-core_${scala.minor.version}</artifactId>
+      <version>${spark.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-sql_${scala.minor.version}</artifactId>
       <version>${spark.version}</version>
       <scope>provided</scope>
     </dependency>

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 and onwards Sanford Ryza, Juliet Hougland, Uri Laserson, Sean Owen and Joshua Wills
+ * Copyright 2015 and onwards Sanford Ryza, Uri Laserson, Sean Owen and Joshua Wills
  *
  * See LICENSE file for further information.
  */
@@ -18,6 +18,8 @@ object RunRecommender {
 
   def main(args: Array[String]): Unit = {
     val spark = SparkSession.builder().getOrCreate()
+    // Optional, but may help avoid errors due to long lineage
+    spark.sparkContext.setCheckpointDir("hdfs:///tmp/")
 
     val base = "hdfs:///user/ds/"
     val rawUserArtistData = spark.read.textFile(base + "user_artist_data.txt")
@@ -41,6 +43,8 @@ class RunRecommender(private val spark: SparkSession) {
       rawUserArtistData: Dataset[String],
       rawArtistData: Dataset[String],
       rawArtistAlias: Dataset[String]): Unit = {
+
+    rawUserArtistData.take(5).foreach(println)
 
     val userArtistDF = rawUserArtistData.map { line =>
       val Array(user, artist, _*) = line.split(' ')
@@ -283,8 +287,8 @@ class RunRecommender(private val spark: SparkSession) {
       select("user", "correct")
 
     // Combine these, compute their ratio, and average over all users
-    val meanAUC = allCounts.join(correctCounts, "user").
-      select($"user", ($"correct" / $"total").as("auc")).
+    val meanAUC = allCounts.join(correctCounts, Seq("user"), "left_outer").
+      select($"user", (coalesce($"correct", lit(0)) / $"total").as("auc")).
       agg(mean("auc")).
       as[Double].first()
 

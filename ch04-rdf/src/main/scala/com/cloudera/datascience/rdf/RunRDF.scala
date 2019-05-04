@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 and onwards Sanford Ryza, Juliet Hougland, Uri Laserson, Sean Owen and Joshua Wills
+ * Copyright 2015 and onwards Sanford Ryza, Uri Laserson, Sean Owen and Joshua Wills
  *
  * See LICENSE file for further information.
  */
@@ -72,8 +72,9 @@ class RunRDF(private val spark: SparkSession) {
 
   def simpleDecisionTree(trainData: DataFrame, testData: DataFrame): Unit = {
 
+    val inputCols = trainData.columns.filter(_ != "Cover_Type")
     val assembler = new VectorAssembler().
-      setInputCols(trainData.columns.filter(_ != "Cover_Type")).
+      setInputCols(inputCols).
       setOutputCol("featureVector")
 
     val assembledTrainData = assembler.transform(trainData)
@@ -88,7 +89,7 @@ class RunRDF(private val spark: SparkSession) {
     val model = classifier.fit(assembledTrainData)
     println(model.toDebugString)
 
-    model.featureImportances.toArray.zip(trainData.columns).
+    model.featureImportances.toArray.zip(inputCols).
       sorted.reverse.foreach(println)
 
     val predictions = model.transform(assembledTrainData)
@@ -141,8 +142,9 @@ class RunRDF(private val spark: SparkSession) {
 
   def evaluate(trainData: DataFrame, testData: DataFrame): Unit = {
 
+    val inputCols = trainData.columns.filter(_ != "Cover_Type")
     val assembler = new VectorAssembler().
-      setInputCols(trainData.columns.filter(_ != "Cover_Type")).
+      setInputCols(inputCols).
       setOutputCol("featureVector")
 
     val classifier = new DecisionTreeClassifier().
@@ -172,17 +174,16 @@ class RunRDF(private val spark: SparkSession) {
       setEstimatorParamMaps(paramGrid).
       setTrainRatio(0.9)
 
-    //spark.sparkContext.setLogLevel("DEBUG")
     val validatorModel = validator.fit(trainData)
-    /*
-    DEBUG TrainValidationSplit: Got metric 0.6315930234779452 for model trained with {
-      dtc_ca0f064d06dd-impurity: gini,
-      dtc_ca0f064d06dd-maxBins: 10,
-      dtc_ca0f064d06dd-maxDepth: 1,
-      dtc_ca0f064d06dd-minInfoGain: 0.0
-    }.
-    */
-    //spark.sparkContext.setLogLevel("WARN")
+
+    val paramsAndMetrics = validatorModel.validationMetrics.
+      zip(validatorModel.getEstimatorParamMaps).sortBy(-_._1)
+
+    paramsAndMetrics.foreach { case (metric, params) =>
+        println(metric)
+        println(params)
+        println()
+    }
 
     val bestModel = validatorModel.bestModel
 
@@ -225,8 +226,9 @@ class RunRDF(private val spark: SparkSession) {
     val unencTrainData = unencodeOneHot(trainData)
     val unencTestData = unencodeOneHot(testData)
 
+    val inputCols = unencTrainData.columns.filter(_ != "Cover_Type")
     val assembler = new VectorAssembler().
-      setInputCols(unencTrainData.columns.filter(_ != "Cover_Type")).
+      setInputCols(inputCols).
       setOutputCol("featureVector")
 
     val indexer = new VectorIndexer().
@@ -275,8 +277,9 @@ class RunRDF(private val spark: SparkSession) {
     val unencTrainData = unencodeOneHot(trainData)
     val unencTestData = unencodeOneHot(testData)
 
+    val inputCols = unencTrainData.columns.filter(_ != "Cover_Type")
     val assembler = new VectorAssembler().
-      setInputCols(unencTrainData.columns.filter(_ != "Cover_Type")).
+      setInputCols(inputCols).
       setOutputCol("featureVector")
 
     val indexer = new VectorIndexer().
@@ -321,7 +324,7 @@ class RunRDF(private val spark: SparkSession) {
 
     println(forestModel.extractParamMap)
     println(forestModel.getNumTrees)
-    forestModel.featureImportances.toArray.zip(unencTrainData.columns).
+    forestModel.featureImportances.toArray.zip(inputCols).
       sorted.reverse.foreach(println)
 
     val testAccuracy = multiclassEval.evaluate(bestModel.transform(unencTestData))

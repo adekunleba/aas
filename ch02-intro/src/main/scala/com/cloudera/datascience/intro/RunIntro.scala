@@ -1,117 +1,118 @@
 /*
- * Copyright 2015 and onwards Sanford Ryza, Juliet Hougland, Uri Laserson, Sean Owen and Joshua Wills
+ * Copyright 2015 and onwards Sanford Ryza, Uri Laserson, Sean Owen and Joshua Wills
  *
  * See LICENSE file for further information.
  */
 
 package com.cloudera.datascience.intro
 
-import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.SparkContext._
-import org.apache.spark.rdd.RDD
-import org.apache.spark.util.StatCounter
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
+import org.apache.spark.sql.functions._ // for lit(), first(), etc.
 
-case class MatchData(id1: Int, id2: Int,
-  scores: Array[Double], matched: Boolean)
-case class Scored(md: MatchData, score: Double)
+case class MatchData(
+  id_1: Int,
+  id_2: Int,
+  cmp_fname_c1: Option[Double],
+  cmp_fname_c2: Option[Double],
+  cmp_lname_c1: Option[Double],
+  cmp_lname_c2: Option[Double],
+  cmp_sex: Option[Int],
+  cmp_bd: Option[Int],
+  cmp_bm: Option[Int],
+  cmp_by: Option[Int],
+  cmp_plz: Option[Int],
+  is_match: Boolean
+)
 
 object RunIntro extends Serializable {
   def main(args: Array[String]): Unit = {
-    val sc = new SparkContext(new SparkConf().setAppName("Intro"))
-   
-    val rawblocks = sc.textFile("hdfs:///user/ds/linkage")
-    def isHeader(line: String) = line.contains("id_1")
-    
-    val noheader = rawblocks.filter(x => !isHeader(x))
-    def toDouble(s: String) = {
-     if ("?".equals(s)) Double.NaN else s.toDouble
-    }
+    val spark = SparkSession.builder
+      .appName("Intro")
+      .getOrCreate
+    import spark.implicits._
+ 
+    val preview = spark.read.csv("hdfs:///user/ds/linkage")
+    preview.show()
+    preview.printSchema()
 
-    def parse(line: String) = {
-      val pieces = line.split(',')
-      val id1 = pieces(0).toInt
-      val id2 = pieces(1).toInt
-      val scores = pieces.slice(2, 11).map(toDouble)
-      val matched = pieces(11).toBoolean
-      MatchData(id1, id2, scores, matched)
-    }
+    val parsed = spark.read
+      .option("header", "true")
+      .option("nullValue", "?")
+      .option("inferSchema", "true")
+      .csv("hdfs:///user/ds/linkage")
+    parsed.show()
+    parsed.printSchema()
 
-    val parsed = noheader.map(line => parse(line))
+    parsed.count()
     parsed.cache()
+    parsed.groupBy("is_match").count().orderBy($"count".desc).show()
 
-    val matchCounts = parsed.map(md => md.matched).countByValue()
-    val matchCountsSeq = matchCounts.toSeq
-    matchCountsSeq.sortBy(_._2).reverse.foreach(println)
+    parsed.createOrReplaceTempView("linkage")
+    spark.sql("""
+      SELECT is_match, COUNT(*) cnt
+      FROM linkage
+      GROUP BY is_match
+      ORDER BY cnt DESC
+    """).show()
 
-    val stats = (0 until 9).map(i => {
-      parsed.map(_.scores(i)).filter(!_.isNaN).stats()
-    })
-    stats.foreach(println)
+    val summary = parsed.describe()
+    summary.show()
+    summary.select("summary", "cmp_fname_c1", "cmp_fname_c2").show()
 
-    val nasRDD = parsed.map(md => {
-      md.scores.map(d => NAStatCounter(d))
-    })
-    val reduced = nasRDD.reduce((n1, n2) => {
-      n1.zip(n2).map { case (a, b) => a.merge(b) }
-    })
-    reduced.foreach(println)
+    val matches = parsed.where("is_match = true")
+    val misses = parsed.filter($"is_match" === false)
+    val matchSummary = matches.describe()
+    val missSummary = misses.describe()
 
-    val statsm = statsWithMissing(parsed.filter(_.matched).map(_.scores))
-    val statsn = statsWithMissing(parsed.filter(!_.matched).map(_.scores))
-    statsm.zip(statsn).map { case(m, n) =>
-      (m.missing + n.missing, m.stats.mean - n.stats.mean)
-    }.foreach(println)
+    val matchSummaryT = pivotSummary(matchSummary)
+    val missSummaryT = pivotSummary(missSummary)
+    matchSummaryT.createOrReplaceTempView("match_desc")
+    missSummaryT.createOrReplaceTempView("miss_desc")
+    spark.sql("""
+      SELECT a.field, a.count + b.count total, a.mean - b.mean delta
+      FROM match_desc a INNER JOIN miss_desc b ON a.field = b.field
+      ORDER BY delta DESC, total DESC
+    """).show()
 
-    def naz(d: Double) = if (Double.NaN.equals(d)) 0.0 else d
-    val ct = parsed.map(md => {
-      val score = Array(2, 5, 6, 7, 8).map(i => naz(md.scores(i))).sum
-      Scored(md, score)
-    })
-
-    ct.filter(s => s.score >= 4.0).
-      map(s => s.md.matched).countByValue().foreach(println)
-    ct.filter(s => s.score >= 2.0).
-      map(s => s.md.matched).countByValue().foreach(println)
+    val matchData = parsed.as[MatchData]
+    val scored = matchData.map { md =>
+      (scoreMatchData(md), md.is_match)
+    }.toDF("score", "is_match")
+    crossTabs(scored, 4.0).show()
   }
 
-  def statsWithMissing(rdd: RDD[Array[Double]]): Array[NAStatCounter] = {
-    val nastats = rdd.mapPartitions((iter: Iterator[Array[Double]]) => {
-      val nas: Array[NAStatCounter] = iter.next().map(d => NAStatCounter(d))
-      iter.foreach(arr => {
-        nas.zip(arr).foreach { case (n, d) => n.add(d) }
-      })
-      Iterator(nas)
-    })
-    nastats.reduce((n1, n2) => {
-      n1.zip(n2).map { case (a, b) => a.merge(b) }
-    })
+  def crossTabs(scored: DataFrame, t: Double): DataFrame = {
+    scored.
+      selectExpr(s"score >= $t as above", "is_match").
+      groupBy("above").
+      pivot("is_match", Seq("true", "false")).
+      count()
   }
-}
 
-class NAStatCounter extends Serializable {
-  val stats: StatCounter = new StatCounter()
-  var missing: Long = 0
-
-  def add(x: Double): NAStatCounter = {
-    if (x.isNaN) {
-      missing += 1
-    } else {
-      stats.merge(x)
+  case class Score(value: Double) {
+    def +(oi: Option[Int]) = {
+      Score(value + oi.getOrElse(0))
     }
-    this
   }
 
-  def merge(other: NAStatCounter): NAStatCounter = {
-    stats.merge(other.stats)
-    missing += other.missing
-    this
+  def scoreMatchData(md: MatchData): Double = {
+    (Score(md.cmp_lname_c1.getOrElse(0.0)) + md.cmp_plz +
+        md.cmp_by + md.cmp_bd + md.cmp_bm).value
   }
 
-  override def toString: String = {
-    "stats: " + stats.toString + " NaN: " + missing
+  def pivotSummary(desc: DataFrame): DataFrame = {
+    val lf = longForm(desc)
+    lf.groupBy("field").
+      pivot("metric", Seq("count", "mean", "stddev", "min", "max")).
+      agg(first("value"))
   }
-}
 
-object NAStatCounter extends Serializable {
-  def apply(x: Double) = new NAStatCounter().add(x)
+  def longForm(desc: DataFrame): DataFrame = {
+    import desc.sparkSession.implicits._ // For toDF RDD -> DataFrame conversion
+    val columns = desc.schema.map(_.name)
+    desc.flatMap(row => {
+      val metric = row.getAs[String](columns.head)
+      columns.tail.map(columnName => (metric, columnName, row.getAs[String](columnName).toDouble))
+    } ).toDF("metric", "field", "value")
+  }
 }

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
- Copyright 2015 and onwards Sanford Ryza, Juliet Hougland, Uri Laserson, Sean Owen and Joshua Wills
+ Copyright 2015 and onwards Sanford Ryza, Uri Laserson, Sean Owen and Joshua Wills
 
  See LICENSE file for further information.
  -->
@@ -38,16 +38,9 @@
       <groupId>edu.umd</groupId>
       <artifactId>cloud9</artifactId>
     </dependency>
-    <!-- This is only here for edu.umd:cloud9 -->
-    <dependency>
-      <groupId>com.google.guava</groupId>
-      <artifactId>guava</artifactId>
-      <version>14.0.1</version>
-    </dependency>
     <dependency>
       <groupId>info.bliki.wiki</groupId>
       <artifactId>bliki-core</artifactId>
-      <version>3.0.19</version>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>

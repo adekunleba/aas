@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
- Copyright 2015 and onwards Sanford Ryza, Juliet Hougland, Uri Laserson, Sean Owen and Joshua Wills
+ Copyright 2015 and onwards Sanford Ryza, Uri Laserson, Sean Owen and Joshua Wills
 
  See LICENSE file for further information.
  -->
@@ -22,19 +22,11 @@
     <dependency>
       <groupId>org.scalanlp</groupId>
       <artifactId>breeze-viz_${scala.minor.version}</artifactId>
-      <version>0.11.2</version>
+      <version>0.13.2</version>
     </dependency>
     <dependency>
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-math3</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>com.github.nscala-time</groupId>
-      <artifactId>nscala-time_${scala.minor.version}</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>joda-time</groupId>
-      <artifactId>joda-time</artifactId>
     </dependency>
   </dependencies>
 
